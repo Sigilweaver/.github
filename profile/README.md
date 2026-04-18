@@ -10,10 +10,11 @@ This organization is a personal open-source umbrella. The projects here are thin
 
 | Project | Description |
 |---------|-------------|
+| [Loom](https://github.com/sigilweaver/loom) | Visual data pipeline tool built on Python. Self-hosted, no SaaS required. Approaching its first public release. |
 | [OpenYXDB](https://github.com/sigilweaver/openyxdb) | Cross-platform C++/Python library for reading and writing Alteryx YXDB files. A maintained fork of Alteryx's official open-source implementation, with bug fixes, modern CMake, and PyArrow/Pandas/Polars integration. |
 | [YXDB-Sources](https://github.com/sigilweaver/yxdb-sources) | Curated index of publicly available YXDB files from the open-source ecosystem. |
 
-More in active development.
+Landing pages for each project live at [sigilweaver.app](https://sigilweaver.app/). More projects are in active development.
 
 ---
 
