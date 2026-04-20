@@ -16,6 +16,8 @@ This organization is a personal open-source umbrella. The projects here are thin
 
 Reverse-engineering and documenting proprietary binary formats. Each format gets an open spec/parser (`Open*`) and a public file corpus (`*-Sources`).
 
+> Have a proprietary binary format you'd like reverse-engineered and documented? See the [methodology and rules](https://github.com/Sigilweaver/.github/blob/main/METHODOLOGY.md) or reach out at [requests@sigilweaver.app](mailto:requests@sigilweaver.app).
+
 #### QVD — Qlik
 
 | Repository | Description |
@@ -44,3 +46,4 @@ Strong opinions on tooling and project structure:
 - **Own the infrastructure.** Self-hosted, open-source, no required vendor accounts, no mandatory SaaS.
 
 Open source because every tool in this stack is open source. That's the deal.
+
