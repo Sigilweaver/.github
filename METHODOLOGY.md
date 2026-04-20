@@ -16,7 +16,7 @@ Proprietary binary formats are everywhere. When a vendor controls the only parse
 
 ## What "clean-room" means here
 
-Every spec and parser is developed by direct observation of publicly available binary files. No vendor source code, no licensed SDKs, no disassembly of proprietary executables, no material obtained under NDA, no files generated under EULA. The spec is written in plain language; the implementation is written from scratch against that spec.
+Every spec and parser is developed by direct observation of publicly available binary files. No vendor source code, no licensed SDKs, no disassembly of proprietary executables, no material obtained under NDA. Files generated under a EULA are acceptable only if their primary purpose is something other than reverse engineering — a researcher's actual experimental data, a student's coursework, a company's own business records. Files created specifically to probe a format for reverse-engineering purposes are not.
 
 This is consistent with the approach upheld in *Sega v. Accolade*, *Sony v. Connectix*, and the broader line of US and EU fair-use / interoperability caselaw. The goal is interoperability, not reproduction.
 
@@ -55,7 +55,7 @@ Formats that exist purely for DRM, anti-cheat, or access control are out of scop
 ## How the work proceeds
 
 1. **Corpus** — find and index publicly available files using the `*-Sources` pipeline. The corpus feeds both spec development and validation.
-2. **Observation** — load files in a hex editor, write tooling to dump structures, identify patterns. The `re/` directory in each format repo captures this work.
+2. **Observation** — load files in a hex editor, write tooling to dump structures, identify patterns.
 3. **Specification** — write a plain-English spec that describes the binary layout precisely enough that someone could implement a parser independently. The spec is a first-class artifact, not a comment in the code.
 4. **Parser** — implement a reader (and writer where it makes sense) against the spec. Rust for performance-sensitive work; Python for ergonomics and accessibility.
 5. **Validation** — run the parser against the full public corpus and report pass rates. A release is not made until the pass rate is high enough to be genuinely useful.
