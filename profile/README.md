@@ -10,9 +10,25 @@ This organization is a personal open-source umbrella. The projects here are thin
 
 | Project | Description |
 |---------|-------------|
-| [Loom](https://github.com/sigilweaver/loom) | Visual data pipeline tool built on Python. Self-hosted, no SaaS required. Approaching its first public release. |
-| [OpenYXDB](https://github.com/sigilweaver/openyxdb) | Cross-platform C++/Python library for reading and writing Alteryx YXDB files. A maintained fork of Alteryx's official open-source implementation, with bug fixes, modern CMake, and PyArrow/Pandas/Polars integration. |
-| [YXDB-Sources](https://github.com/sigilweaver/yxdb-sources) | Curated index of publicly available YXDB files from the open-source ecosystem. |
+| [Loom](https://github.com/sigilweaver/loom) | Visual data pipeline tool built on Polars. Self-hosted, no SaaS required. Approaching its first public release. (June?) |
+
+### File formats
+
+Reverse-engineering and documenting proprietary binary formats. Each format gets an open spec/parser (`Open*`) and a public file corpus (`*-Sources`).
+
+#### QVD — Qlik
+
+| Repository | Description |
+|------------|-------------|
+| [OpenQVD](https://github.com/Sigilweaver/OpenQVD) | Clean-room Rust reader/writer for Qlik QVD files. Full spec, Python bindings (PyArrow, Polars, Pandas), CLI. |
+| [QVD-Sources](https://github.com/Sigilweaver/QVD-Sources) | Curated index of ~1,145 public `.qvd` files across 716 GitHub repos. |
+
+#### YXDB — Alteryx
+
+| Repository | Description |
+|------------|-------------|
+| [OpenYXDB](https://github.com/Sigilweaver/OpenYXDB) | Maintained fork of Alteryx's open-source C++ YXDB library. Cross-platform, Python bindings via nanobind, PyArrow/Pandas/Polars integration. |
+| [YXDB-Sources](https://github.com/Sigilweaver/YXDB-Sources) | Curated index of 1,824 public `.yxdb` files (1,644 E1, 180 E2) across 156 GitHub repos. |
 
 Landing pages for each project live at [sigilweaver.app](https://sigilweaver.app/). More projects are in active development.
 
