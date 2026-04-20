@@ -4,6 +4,8 @@ A *sigil* is a symbol that carries meaning — an instruction, a pattern, a comp
 
 This organization is a personal open-source umbrella. The projects here are things I built because I wanted them to exist — tools I find useful, formats I wanted to understand, infrastructure I wanted to own.
 
+Some of it is for things the world needs but nobody will build commercially: open specifications for closed formats, tools for scientific workflows, infrastructure that researchers can actually run themselves.
+
 ---
 
 ## Projects
@@ -32,7 +34,33 @@ Reverse-engineering and documenting proprietary binary formats. Each format gets
 | [OpenYXDB](https://github.com/Sigilweaver/OpenYXDB) | Maintained fork of Alteryx's open-source C++ YXDB library. Cross-platform, Python bindings via nanobind, PyArrow/Pandas/Polars integration. |
 | [YXDB-Sources](https://github.com/Sigilweaver/YXDB-Sources) | Curated index of 1,824 public `.yxdb` files (1,644 E1, 180 E2) across 156 GitHub repos. |
 
-Landing pages for each project live at [sigilweaver.app](https://sigilweaver.app/). More projects are in active development.
+### Bioinformatics
+
+> These projects are coming soon.
+
+#### Genomics
+
+| Project | Description |
+|---------|-------------|
+| [BioLance](https://github.com/Sigilweaver/BioLance) | Fast, columnar multi-sample variant store built on LanceDB. Ingests VCF/BCF files (and annotation sources like ClinVar) into per-field Arrow columns — query by region or gene, annotate against ClinVar, and compare across samples with no Spark, no cloud, no GenomicsDB. |
+
+#### Proteomics
+
+Mass spectrometry file formats, following the same reverse-engineering approach as QVD and YXDB.
+
+##### TFRaw — Thermo Fisher Scientific
+
+| Repository | Description |
+|------------|-------------|
+| [OpenTFRaw](https://github.com/Sigilweaver/OpenTFRaw) | Clean-room spec and reader for Thermo Fisher's proprietary RAW format, used by Xcalibur on Orbitrap and LTQ instruments. Full format documentation, mass spectra and chromatogram extraction. |
+| [TFRaw-Sources](https://github.com/Sigilweaver/TFRaw-Sources) | Curated index of public `.raw` files from mass spectrometry data repositories. |
+
+##### TDF — Bruker timsTOF
+
+| Repository | Description |
+|------------|-------------|
+| [OpenTDF](https://github.com/Sigilweaver/OpenTDF) | Clean-room spec and reader for Bruker's TDF format — an SQLite database paired with a binary blob (`analysis.tdf_bin`), used by timsTOF instruments for time-of-flight acquisitions. |
+| [TDF-Sources](https://github.com/Sigilweaver/TDF-Sources) | Curated index of public Bruker `.d` analysis directories from mass spectrometry data repositories. |
 
 ---
 
