@@ -62,6 +62,12 @@ Mass spectrometry file formats, following the same reverse-engineering approach 
 | [OpenTDF](https://github.com/Sigilweaver/OpenTDF) | Clean-room spec and reader for Bruker's TDF format — an SQLite database paired with a binary blob (`analysis.tdf_bin`), used by timsTOF instruments for time-of-flight acquisitions. |
 | [TDF-Sources](https://github.com/Sigilweaver/TDF-Sources) | Curated index of public Bruker `.d` analysis directories from mass spectrometry data repositories. |
 
+#### Medical Imaging
+
+| Repository | Description |
+|------------|-------------|
+| [OpenKSpace](https://github.com/Sigilweaver/OpenKSpace) | Rust library and CLI for Cartesian MRI k-space reconstruction from ISMRMRD `.h5` files. Noise pre-whitening, navigator phase correction, 2D/3D IFFT with root-sum-of-squares coil combination, PNG output. |
+
 ---
 
 ## How Things Are Built Here
