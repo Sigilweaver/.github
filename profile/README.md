@@ -53,14 +53,12 @@ Mass spectrometry file formats, following the same reverse-engineering approach 
 | Repository | Description |
 |------------|-------------|
 | [OpenTFRaw](https://github.com/Sigilweaver/OpenTFRaw) | Clean-room spec and reader for Thermo Fisher's proprietary RAW format, used by Xcalibur on Orbitrap and LTQ instruments. Full format documentation, mass spectra and chromatogram extraction. |
-| [TFRaw-Sources](https://github.com/Sigilweaver/TFRaw-Sources) | Curated index of public `.raw` files from mass spectrometry data repositories. |
 
 ##### TDF — Bruker timsTOF
 
 | Repository | Description |
 |------------|-------------|
 | [OpenTDF](https://github.com/Sigilweaver/OpenTDF) | Clean-room spec and reader for Bruker's TDF format — an SQLite database paired with a binary blob (`analysis.tdf_bin`), used by timsTOF instruments for time-of-flight acquisitions. |
-| [TDF-Sources](https://github.com/Sigilweaver/TDF-Sources) | Curated index of public Bruker `.d` analysis directories from mass spectrometry data repositories. |
 
 #### Medical Imaging
 
