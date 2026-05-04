@@ -50,8 +50,9 @@ Open, high-performance tooling for specialized scientific workflows across genom
 
 | Repository | Description |
 |------------|-------------|
-| [OpenTFRaw](https://github.com/Sigilweaver/OpenTFRaw) | Independent spec and reader for Thermo Fisher's proprietary RAW format, used by Xcalibur on Orbitrap and LTQ instruments. Full format documentation, mass spectra and chromatogram extraction. |
+| [OpenTFRaw](https://github.com/Sigilweaver/OpenTFRaw) | Independent spec and reader for Thermo Fisher's RAW format, used by Xcalibur on Orbitrap and LTQ instruments. Full format documentation, mass spectra and chromatogram extraction. |
 | [OpenTDF](https://github.com/Sigilweaver/OpenTDF) | Independent spec and reader for Bruker's TDF format — an SQLite database paired with a binary blob (`analysis.tdf_bin`), used by timsTOF instruments for time-of-flight acquisitions. |
+| [OpenWRaw](https://github.com/Sigilweaver/OpenWRaw) | Independent spec and reader for Waters' RAW format. Handles the MassLynx directory structure to extract mass spectra, chromatograms, and metadata. |
 
 ### Medical Imaging
 
