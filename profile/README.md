@@ -35,6 +35,11 @@ Developing reference implementations and public test corpora for binary formats.
 |------------|-------------|
 | [Hyper-Sources](https://github.com/Sigilweaver/Hyper-Sources) | Curated index of `.hyper` files sourced from public GitHub repos. |
 
+### Other
+| Repository | Description |
+|------------|-------------|
+| [OpenQBW](https://github.com/Sigilweaver/OpenQBW) | Specification and parser for QuickBooks `.qbw` files. |
+| [OpenSQLAnywhere](https://github.com/Sigilweaver/OpenSQLAnywhere) | Specification and parser for the SAP SQL Anywhere page-store format |
 
 ## Scientific Data & Bioinformatics
 
