@@ -27,6 +27,7 @@ Developing reference implementations and public test corpora for binary formats.
 
 | Repository | Description |
 |------------|-------------|
+| [SigilYX](https://github.com/Sigilweaver/SigilYX) | Rust reader/writer for Alteryx YXDB files. Full spec, Python bindings (PyArrow, Polars, Pandas), lazy-compatible. |
 | [OpenYXDB](https://github.com/Sigilweaver/OpenYXDB) | Maintained fork of Alteryx's open-source C++ YXDB library. Cross-platform, Python bindings via nanobind, PyArrow/Pandas/Polars integration. |
 | [YXDB-Sources](https://github.com/Sigilweaver/YXDB-Sources) | Curated index of `.yxdb` files sourced from public GitHub repos. |
 
