@@ -16,22 +16,21 @@ Sigilweaver primarily develops open-source scientific data tooling and standalon
 
 Open, high-performance tooling for specialized scientific workflows across genomics, proteomics, and medical imaging.
 
+### Proteomics
+
+| Repository | Description |
+|------------|-------------|
+| [OpenProteo](https://github.com/Sigilweaver/OpenProteo) | Umbrella Rust and Python stack for proteomics raw-file access. Single API over all three vendor parsers, mzML 1.1.0 conversion, and Arrow output - no vendor SDKs or Windows-only DLLs. |
+| [OpenTFRaw](https://github.com/Sigilweaver/OpenTFRaw) | Independent spec and reader for Thermo Fisher's RAW format, used by Xcalibur on Orbitrap and LTQ instruments. Full format documentation, mass spectra and chromatogram extraction. |
+| [OpenTimsTDF](https://github.com/Sigilweaver/OpenTimsTDF) | Independent spec and reader for Bruker's TDF format - an SQLite database paired with a binary blob (`analysis.tdf_bin`), used by timsTOF instruments for time-of-flight acquisitions. |
+| [OpenWRaw](https://github.com/Sigilweaver/OpenWRaw) | Independent spec and reader for Waters' RAW format. Handles the MassLynx directory structure to extract mass spectra, chromatograms, and metadata. |
+| [ProLance](https://github.com/Sigilweaver/ProLance) | Columnar, memory-mapped mass spectrometry store built on Lance. Ingests from vendor formats (via OpenProteo) or mzML - faster reads, cheaper seeks, multi-run directories, and direct export back to mzML. |
+
 ### Genomics
 
 | Project | Description |
 |---------|-------------|
 | [BioLance](https://github.com/Sigilweaver/BioLance) | Fast, columnar multi-sample variant store built on LanceDB. Ingests VCF/BCF files (and annotation sources like ClinVar) into per-field Arrow columns - query by region or gene, annotate against ClinVar, and compare across samples with no Spark, no cloud, no GenomicsDB. |
-
-### Proteomics
-
-| Repository | Description |
-|------------|-------------|
-| [ProLance](https://github.com/Sigilweaver/ProLance) | Columnar, memory-mapped mass spectrometry store built on Lance. Ingests from vendor formats (via OpenProteo) or mzML - faster reads, cheaper seeks, multi-run directories, and direct export back to mzML. |
-| [OpenProteo](https://github.com/Sigilweaver/OpenProteo) | Umbrella Rust and Python stack for proteomics raw-file access. Single API over all three vendor parsers, mzML 1.1.0 conversion, and Arrow output - no vendor SDKs or Windows-only DLLs. |
-| [OpenProteoCore](https://github.com/Sigilweaver/OpenProteoCore) | Shared, vendor-neutral foundation for the OpenProteo stack. Defines the `SpectrumSource` trait, canonical `SpectrumRecord` / `RunMetadata` types, a streaming mzML 1.1.0 writer with indexed output and SHA-1 footer, an optional Arrow `RecordBatch` bridge, and a cross-vendor conformance harness. |
-| [OpenTFRaw](https://github.com/Sigilweaver/OpenTFRaw) | Independent spec and reader for Thermo Fisher's RAW format, used by Xcalibur on Orbitrap and LTQ instruments. Full format documentation, mass spectra and chromatogram extraction. |
-| [OpenTimsTDF](https://github.com/Sigilweaver/OpenTimsTDF) | Independent spec and reader for Bruker's TDF format - an SQLite database paired with a binary blob (`analysis.tdf_bin`), used by timsTOF instruments for time-of-flight acquisitions. |
-| [OpenWRaw](https://github.com/Sigilweaver/OpenWRaw) | Independent spec and reader for Waters' RAW format. Handles the MassLynx directory structure to extract mass spectra, chromatograms, and metadata. |
 
 ### Medical Imaging
 
