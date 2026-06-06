@@ -30,7 +30,8 @@ Open, high-performance tooling for specialized scientific workflows across genom
 
 | Project | Description |
 |---------|-------------|
-| [BioLance](https://github.com/Sigilweaver/BioLance) | Fast, columnar multi-sample variant store built on LanceDB. Ingests VCF/BCF files (and annotation sources like ClinVar) into per-field Arrow columns - query by region or gene, annotate against ClinVar, and compare across samples with no Spark, no cloud, no GenomicsDB. |
+| [Phreddy](https://github.com/Sigilweaver/Phreddy) | From-scratch, columnar, memory-mappable genomics pipeline in Rust. Transcodes paired-end FASTQ into a custom columnar format then runs every downstream stage (map, sort, call) as a bounded-memory streaming computation -- single binary, single machine, no cluster. Research preview. |
+| [GenoLance](https://github.com/Sigilweaver/GenoLance) | Fast, columnar multi-sample variant store built on LanceDB. Ingests VCF/BCF files (and annotation sources like ClinVar) into per-field Arrow columns - query by region or gene, annotate against ClinVar, and compare across samples with no Spark, no cloud, no GenomicsDB. |
 
 ### Medical Imaging
 
