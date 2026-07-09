@@ -14,17 +14,19 @@ Sigilweaver primarily develops open-source scientific data tooling and standalon
 
 ## Scientific Data & Bioinformatics
 
-Open, high-performance tooling for specialized scientific workflows across genomics, proteomics, and medical imaging.
+Open, high-performance tooling for specialized scientific workflows across genomics, mass spectrometry, and medical imaging.
 
-### Proteomics
+### Mass Spectrometry
 
 | Repository | Description |
 |------------|-------------|
-| [OpenProteo](https://github.com/Sigilweaver/OpenProteo) | Umbrella Rust and Python stack for proteomics raw-file access. Single API over all three vendor parsers, mzML 1.1.0 conversion, and Arrow output - no vendor SDKs or Windows-only DLLs. |
+| [OpenProteo](https://github.com/Sigilweaver/OpenProteo) | Umbrella Rust and Python stack for mass spectrometry raw-file access. Single API over all vendor parsers, mzML 1.1.0 conversion, and Arrow output - no vendor SDKs or Windows-only DLLs. |
 | [OpenTFRaw](https://github.com/Sigilweaver/OpenTFRaw) | Independent spec and reader for Thermo Fisher's RAW format, used by Xcalibur on Orbitrap and LTQ instruments. Full format documentation, mass spectra and chromatogram extraction. |
 | [OpenTimsTDF](https://github.com/Sigilweaver/OpenTimsTDF) | Independent spec and reader for Bruker's TDF format - an SQLite database paired with a binary blob (`analysis.tdf_bin`), used by timsTOF instruments for time-of-flight acquisitions. |
 | [OpenWRaw](https://github.com/Sigilweaver/OpenWRaw) | Independent spec and reader for Waters' RAW format. Handles the MassLynx directory structure to extract mass spectra, chromatograms, and metadata. |
-| [ProLance](https://github.com/Sigilweaver/ProLance) | Columnar, memory-mapped mass spectrometry store built on Lance. Ingests from vendor formats (via OpenProteo) or mzML - faster reads, cheaper seeks, multi-run directories, and direct export back to mzML. |
+| [OpenARaw](https://github.com/Sigilweaver/OpenARaw) | Independent spec and reader for Agilent's MassHunter `.d` format, clean-room reverse-engineered. Covers Q-TOF (profile and centroid) and QQQ (MRM) acquisitions. |
+| [OpenSXRaw](https://github.com/Sigilweaver/OpenSXRaw) | Independent spec and reader for SCIEX's legacy `.wiff`/`.wiff.scan` format, clean-room reverse-engineered. Covers the TripleTOF and QTRAP instrument families. |
+| [SpecLance](https://github.com/Sigilweaver/SpecLance) | Columnar, memory-mapped mass spectrometry store built on Lance. Ingests from vendor formats (via OpenProteo) or mzML - faster reads, cheaper seeks, multi-run directories, and direct export back to mzML. |
 
 ### Genomics
 
