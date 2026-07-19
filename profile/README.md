@@ -24,9 +24,9 @@ Open, high-performance tooling for specialized scientific workflows across genom
 | [OpenTFRaw](https://github.com/Sigilweaver/OpenTFRaw) | Independent spec and reader for Thermo Fisher's RAW format, used by Xcalibur on Orbitrap and LTQ instruments. Full format documentation, mass spectra and chromatogram extraction. |
 | [OpenTimsTDF](https://github.com/Sigilweaver/OpenTimsTDF) | Independent spec and reader for Bruker's TDF format - an SQLite database paired with a binary blob (`analysis.tdf_bin`), used by timsTOF instruments for time-of-flight acquisitions. |
 | [OpenWRaw](https://github.com/Sigilweaver/OpenWRaw) | Independent spec and reader for Waters' RAW format. Handles the MassLynx directory structure to extract mass spectra, chromatograms, and metadata. |
-| [OpenARaw](https://github.com/Sigilweaver/OpenARaw) | Independent spec and reader for Agilent's MassHunter `.d` format, clean-room reverse-engineered. Covers Q-TOF (profile and centroid) and QQQ (MRM) acquisitions. |
-| [OpenSXRaw](https://github.com/Sigilweaver/OpenSXRaw) | Independent spec and reader for SCIEX's legacy `.wiff`/`.wiff.scan` format, clean-room reverse-engineered. Covers the TripleTOF and QTRAP instrument families. |
-| [OpenSZRaw](https://github.com/Sigilweaver/OpenSZRaw) | Independent spec and reader for Shimadzu LabSolutions raw data (`.lcd` LC-MS, `.qgd`/`.gcd` GC-MS), clean-room reverse-engineered. Covers IT-TOF and QTOF (`.lcd`) and full-scan/MRM (`.qgd`) acquisitions. |
+| [OpenARaw](https://github.com/Sigilweaver/OpenARaw) | Independent spec and reader for Agilent's MassHunter `.d` format. Covers Q-TOF (profile and centroid) and QQQ (MRM) acquisitions. |
+| [OpenSXRaw](https://github.com/Sigilweaver/OpenSXRaw) | Independent spec and reader for SCIEX's legacy `.wiff`/`.wiff.scan` format. Covers the TripleTOF and QTRAP instrument families. |
+| [OpenSZRaw](https://github.com/Sigilweaver/OpenSZRaw) | Independent spec and reader for Shimadzu LabSolutions raw data (`.lcd` LC-MS, `.qgd`/`.gcd` GC-MS). Covers IT-TOF and QTOF (`.lcd`) and full-scan/MRM (`.qgd`) acquisitions. |
 | [SpecLance](https://github.com/Sigilweaver/SpecLance) | Columnar, memory-mapped mass spectrometry store built on Lance. Ingests from vendor formats (via OpenMassSpec) or mzML - faster reads, cheaper seeks, multi-run directories, and direct export back to mzML. |
 
 ### Genomics
