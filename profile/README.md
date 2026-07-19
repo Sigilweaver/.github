@@ -21,12 +21,7 @@ Open, high-performance tooling for specialized scientific workflows across genom
 | Repository | Description |
 |------------|-------------|
 | [OpenMassSpec](https://github.com/Sigilweaver/OpenMassSpec) | Umbrella Rust and Python stack for mass spectrometry raw-file access. Single API over all vendor parsers, mzML 1.1.0 conversion, and Arrow output - no vendor SDKs or Windows-only DLLs. |
-| [OpenTFRaw](https://github.com/Sigilweaver/OpenTFRaw) | Independent spec and reader for Thermo Fisher's RAW format, used by Xcalibur on Orbitrap and LTQ instruments. Full format documentation, mass spectra and chromatogram extraction. |
-| [OpenTimsTDF](https://github.com/Sigilweaver/OpenTimsTDF) | Independent spec and reader for Bruker's TDF format - an SQLite database paired with a binary blob (`analysis.tdf_bin`), used by timsTOF instruments for time-of-flight acquisitions. |
-| [OpenWRaw](https://github.com/Sigilweaver/OpenWRaw) | Independent spec and reader for Waters' RAW format. Handles the MassLynx directory structure to extract mass spectra, chromatograms, and metadata. |
-| [OpenARaw](https://github.com/Sigilweaver/OpenARaw) | Independent spec and reader for Agilent's MassHunter `.d` format. Covers Q-TOF (profile and centroid) and QQQ (MRM) acquisitions. |
-| [OpenSXRaw](https://github.com/Sigilweaver/OpenSXRaw) | Independent spec and reader for SCIEX's legacy `.wiff`/`.wiff.scan` format. Covers the TripleTOF and QTRAP instrument families. |
-| [OpenSZRaw](https://github.com/Sigilweaver/OpenSZRaw) | Independent spec and reader for Shimadzu LabSolutions raw data (`.lcd` LC-MS, `.qgd`/`.gcd` GC-MS). Covers IT-TOF and QTOF (`.lcd`) and full-scan/MRM (`.qgd`) acquisitions. |
+| [OpenTFRaw](https://github.com/Sigilweaver/OpenTFRaw)<br>[OpenTimsTDF](https://github.com/Sigilweaver/OpenTimsTDF)<br>[OpenWRaw](https://github.com/Sigilweaver/OpenWRaw)<br>[OpenARaw](https://github.com/Sigilweaver/OpenARaw)<br>[OpenSXRaw](https://github.com/Sigilweaver/OpenSXRaw)<br>[OpenSZRaw](https://github.com/Sigilweaver/OpenSZRaw) | Independent specs and readers for each vendor's raw format, unified under OpenMassSpec: Thermo Fisher RAW, Bruker TDF, Waters RAW, Agilent `.d`, SCIEX `.wiff`, Shimadzu `.lcd`/`.qgd`. |
 | [SpecLance](https://github.com/Sigilweaver/SpecLance) | Columnar, memory-mapped mass spectrometry store built on Lance. Ingests from vendor formats (via OpenMassSpec) or mzML - faster reads, cheaper seeks, multi-run directories, and direct export back to mzML. |
 
 ### Genomics
