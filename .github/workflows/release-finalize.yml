@@ -1,0 +1,115 @@
+# Reusable post-publish steps for Sigilweaver Rust + PyO3 reader repos.
+# The caller runs it on the same tag push as release.yml, after the
+# crates.io and PyPI uploads succeed.
+#
+# Jobs:
+#   github-release - creates the GitHub Release for the tag (or updates
+#                    its notes on a re-run) with the CHANGELOG section for
+#                    the version as the body. Versions with a pre-release
+#                    suffix (a "-" in the version) are marked pre-release.
+#   docs           - force-pushes the tag's commit to `docs-branch`
+#                    (`git push -f origin <tag>^{commit}:refs/heads/<branch>`),
+#                    which is what the Cloudflare docs deploy watches.
+#
+# Inputs are documented in this repo's README.md.
+
+name: Release finalize
+
+on:
+  workflow_call:
+    inputs:
+      changelog:
+        description: Changelog file to take the release notes from.
+        type: string
+        default: CHANGELOG.md
+      docs-branch:
+        description: Branch moved to the tag commit. Empty skips the docs job.
+        type: string
+        default: docs-live
+
+permissions:
+  contents: read
+
+jobs:
+  github-release:
+    name: GitHub Release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Require a tag
+        if: github.ref_type != 'tag'
+        run: |
+          echo "::error::release-finalize.yml must run on a tag push, got $GITHUB_REF"
+          exit 1
+
+      - uses: actions/checkout@v7
+
+      - name: Extract release notes
+        shell: python3 {0}
+        env:
+          TAG: ${{ github.ref_name }}
+          CHANGELOG: ${{ inputs.changelog }}
+        run: |
+          import os
+          import re
+          import sys
+
+          version = os.environ["TAG"].removeprefix("v")
+          changelog = os.environ["CHANGELOG"]
+          with open(changelog, encoding="utf-8") as f:
+              lines = f.read().splitlines()
+          heading = re.compile(r"^##\s+\[?v?" + re.escape(version) + r"\]?(\s|$)")
+          start = next((i for i, line in enumerate(lines) if heading.match(line)), None)
+          if start is None:
+              print(f"::error::{changelog} has no '## [{version}]' section")
+              sys.exit(1)
+          body = []
+          for line in lines[start + 1:]:
+              if line.startswith("## "):
+                  break
+              body.append(line)
+          # Drop trailing Keep a Changelog link definitions ("[1.0.0]: https://...").
+          while body and (not body[-1].strip() or re.match(r"^\[[^\]]+\]:\s*\S+", body[-1])):
+              body.pop()
+          notes = "\n".join(body).strip()
+          if not notes:
+              print(f"::error::the {version} section of {changelog} is empty")
+              sys.exit(1)
+          with open("release-notes.md", "w", encoding="utf-8") as f:
+              f.write(notes + "\n")
+          print(notes)
+
+      - name: Create or update the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          flags=()
+          case "${TAG#v}" in
+            *-*) flags+=(--prerelease) ;;
+          esac
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release edit "$TAG" --title "$TAG" --notes-file release-notes.md
+          else
+            gh release create "$TAG" --verify-tag --title "$TAG" --notes-file release-notes.md "${flags[@]}"
+          fi
+
+  docs:
+    name: Move ${{ inputs.docs-branch }} to the tag
+    needs: github-release
+    if: inputs.docs-branch != ''
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: git push -f
+        env:
+          TAG: ${{ github.ref_name }}
+          DOCS_BRANCH: ${{ inputs.docs-branch }}
+        run: |
+          git fetch --depth=1 --no-tags origin "+refs/tags/$TAG:refs/tags/$TAG"
+          git push -f origin "refs/tags/$TAG^{commit}:refs/heads/$DOCS_BRANCH"

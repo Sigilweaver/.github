@@ -1,0 +1,81 @@
+# Release OpenSZRaw on a v* tag push.
+#
+#   release  - release.yml: checks the tag matches Cargo.toml and that
+#              CHANGELOG.md has a section for the version, runs rust-ci.yml,
+#              builds abi3 wheels + sdist, then publishes the `openszraw`
+#              crate to crates.io.
+#   pypi     - uploads the wheels + sdist to PyPI with trusted publishing.
+#              This job has to live here, not in release.yml: PyPI trusted
+#              publishing does not work from inside a reusable workflow.
+#   finalize - release-finalize.yml: GitHub Release with the CHANGELOG
+#              section as notes, then force-pushes the tag commit to
+#              docs-live for the Cloudflare docs deploy.
+#
+# The file keeps the name publish.yml because PyPI's trusted publisher for
+# `openszraw` is registered against this workflow filename and the `pypi`
+# environment.
+
+name: Publish
+
+on:
+  push:
+    tags: ["v*"]
+
+concurrency:
+  group: publish-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    name: Release
+    uses: Sigilweaver/.github/.github/workflows/release.yml@main
+    permissions:
+      contents: read
+      id-token: write
+    secrets:
+      CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+    with:
+      crates: openszraw
+      python-manifest-path: crates/openszraw-py/Cargo.toml
+      # Same settings as the `rust` job in ci.yml.
+      ci-doc-args: --workspace --no-deps --exclude openszraw-py
+      ci-corpus-fetch-command: |
+        curl -fsSL --retry 3 --user-agent "OpenSZRaw-CI/1.0" -o PXD019638_L-B2-Br0-1.qgd \
+          https://ftp.pride.ebi.ac.uk/pride/data/archive/2022/02/PXD019638/L-B2-Br0-1.qgd
+        curl -fsSL --retry 3 --user-agent "OpenSZRaw-CI/1.0" -o PXD034978_49_27a__8122021_11.qgd \
+          https://ftp.pride.ebi.ac.uk/pride/data/archive/2022/08/PXD034978/49_27a__8122021_11.qgd
+      ci-corpus-sha256: |
+        830b326b209a93fab22ced649b8214c8e770378a64bfc76b2d35163df570b6a5  PXD019638_L-B2-Br0-1.qgd
+        b220a1de56c13ac5004b2fdbae9743553b1b4400a1a2aa29e08e5d88911530e1  PXD034978_49_27a__8122021_11.qgd
+      ci-corpus-env-var: OPENSZRAW_CORPUS
+      ci-corpus-test-args: -p openszraw --test conformance qgd_
+
+  pypi:
+    name: Publish to PyPI
+    needs: release
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/p/openszraw
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: ${{ needs.release.outputs.dist-artifact-pattern }}
+          path: dist
+          merge-multiple: true
+      - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: dist/
+          skip-existing: true
+
+  finalize:
+    name: Finalize
+    needs: [release, pypi]
+    uses: Sigilweaver/.github/.github/workflows/release-finalize.yml@main
+    permissions:
+      contents: write

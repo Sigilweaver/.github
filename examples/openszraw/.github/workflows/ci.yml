@@ -1,0 +1,74 @@
+# CI for OpenSZRaw, using the shared Sigilweaver reusable workflows.
+#
+# Jobs:
+#   rust   - rust-ci.yml: fmt + clippy (Linux), cargo test (Linux, macOS,
+#            Windows), MSRV check, cargo doc. Fetches two small PRIDE
+#            `.qgd` fixtures (sha256 checked, cached) so
+#            crates/openszraw/tests/conformance.rs exercises the GC-MS
+#            profile and MRM decode paths, then runs the `qgd_` tests with
+#            REQUIRE_CORPUS=1. The `.lcd` conformance tests skip: CORPUS.md
+#            lists no small `.lcd` fixture with a stable public URL.
+#   python - maturin-ci.yml: abi3 wheel + pytest on Linux, macOS, Windows,
+#            with the MRM fixture as OPENSZRAW_TEST_FILE.
+#   docs   - Docusaurus site build (docs/).
+
+name: CI
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  rust:
+    name: Rust
+    uses: Sigilweaver/.github/.github/workflows/rust-ci.yml@main
+    with:
+      # openszraw-py's lib is also named `openszraw`; rustdoc cannot
+      # document both.
+      doc-args: --workspace --no-deps --exclude openszraw-py
+      corpus-fetch-command: |
+        curl -fsSL --retry 3 --user-agent "OpenSZRaw-CI/1.0" -o PXD019638_L-B2-Br0-1.qgd \
+          https://ftp.pride.ebi.ac.uk/pride/data/archive/2022/02/PXD019638/L-B2-Br0-1.qgd
+        curl -fsSL --retry 3 --user-agent "OpenSZRaw-CI/1.0" -o PXD034978_49_27a__8122021_11.qgd \
+          https://ftp.pride.ebi.ac.uk/pride/data/archive/2022/08/PXD034978/49_27a__8122021_11.qgd
+      corpus-sha256: |
+        830b326b209a93fab22ced649b8214c8e770378a64bfc76b2d35163df570b6a5  PXD019638_L-B2-Br0-1.qgd
+        b220a1de56c13ac5004b2fdbae9743553b1b4400a1a2aa29e08e5d88911530e1  PXD034978_49_27a__8122021_11.qgd
+      # Flat fixture dir; see crates/openszraw/tests/conformance.rs.
+      corpus-env-var: OPENSZRAW_CORPUS
+      corpus-test-args: -p openszraw --test conformance qgd_
+
+  python:
+    name: Python
+    uses: Sigilweaver/.github/.github/workflows/maturin-ci.yml@main
+    with:
+      corpus-fetch-command: |
+        curl -fsSL --retry 3 --user-agent "OpenSZRaw-CI/1.0" -o PXD034978_49_27a__8122021_11.qgd \
+          https://ftp.pride.ebi.ac.uk/pride/data/archive/2022/08/PXD034978/49_27a__8122021_11.qgd
+      corpus-sha256: |
+        b220a1de56c13ac5004b2fdbae9743553b1b4400a1a2aa29e08e5d88911530e1  PXD034978_49_27a__8122021_11.qgd
+      test-env: |
+        OPENSZRAW_TEST_FILE={corpus}/PXD034978_49_27a__8122021_11.qgd
+
+  docs:
+    name: Docs (Docusaurus)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: docs
+    steps:
+      - uses: actions/checkout@v7
+      - uses: oven-sh/setup-bun@v2
+      - name: bun install
+        run: bun install --frozen-lockfile
+      - name: bun run build:cloudflare
+        run: bun run build:cloudflare

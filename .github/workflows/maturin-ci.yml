@@ -1,0 +1,224 @@
+# Reusable Python-binding CI for Sigilweaver Rust + PyO3 reader repos.
+#
+# For each OS x Python version: builds one abi3 wheel with maturin, fails
+# if the wheel is not tagged abi3, installs it with the pytest
+# requirements, and runs pytest. Corpus inputs behave as in rust-ci.yml;
+# when the corpus is fetched, pytest runs with REQUIRE_CORPUS=1.
+#
+# Inputs and an example caller are documented in this repo's README.md.
+
+name: Maturin CI
+
+on:
+  workflow_call:
+    inputs:
+      os:
+        description: >-
+          JSON array of runner labels. Empty means
+          ["ubuntu-latest", "macos-latest", "windows-latest"].
+        type: string
+        default: ""
+      python-versions:
+        description: >-
+          JSON array of Python versions the wheel is tested on. Empty
+          means ["3.9", "3.13"].
+        type: string
+        default: ""
+      manifest-path:
+        description: >-
+          Cargo.toml of the PyO3 crate. Empty uses [tool.maturin]
+          manifest-path from pyproject.toml.
+        type: string
+        default: ""
+      maturin-version:
+        description: pip version specifier for maturin.
+        type: string
+        default: ">=1.5,<2"
+      maturin-features:
+        description: >-
+          Comma-separated Cargo features passed to maturin with --features.
+          The default turns on the PyO3 stable ABI (abi3) for Python 3.8+.
+        type: string
+        default: pyo3/abi3-py38
+      maturin-args:
+        description: Extra arguments to `maturin build`.
+        type: string
+        default: ""
+      pytest-requirements:
+        description: Space-separated pip requirements installed next to the wheel.
+        type: string
+        default: pytest
+      pytest-args:
+        description: Arguments to `python -m pytest`.
+        type: string
+        default: tests
+      test-env:
+        description: >-
+          Extra environment for pytest, one KEY=VALUE per line. The literal
+          text {corpus} in a value is replaced with the absolute corpus
+          directory.
+        type: string
+        default: ""
+      corpus-fetch-command:
+        description: Same as rust-ci.yml.
+        type: string
+        default: ""
+      corpus-sha256:
+        description: Same as rust-ci.yml.
+        type: string
+        default: ""
+      corpus-path:
+        description: Same as rust-ci.yml.
+        type: string
+        default: corpus
+      corpus-cache-key:
+        description: Same as rust-ci.yml.
+        type: string
+        default: ""
+      corpus-env-var:
+        description: Same as rust-ci.yml.
+        type: string
+        default: ""
+      corpus-linux-only:
+        description: Same as rust-ci.yml.
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  wheel:
+    name: wheel + pytest (${{ matrix.os }} / py${{ matrix.python }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: ${{ fromJSON(inputs.os || '["ubuntu-latest", "macos-latest", "windows-latest"]') }}
+        python: ${{ fromJSON(inputs.python-versions || '["3.9", "3.13"]') }}
+    defaults:
+      run:
+        shell: bash
+    env:
+      CORPUS_DIR: ${{ github.workspace }}/${{ inputs.corpus-path }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: ${{ matrix.python }}
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Corpus settings
+        id: corpus
+        env:
+          FETCH: ${{ inputs.corpus-fetch-command }}
+          MANIFEST: ${{ inputs.corpus-sha256 }}
+          LINUX_ONLY: ${{ inputs.corpus-linux-only }}
+          EXTRA_KEY: ${{ inputs.corpus-cache-key }}
+        run: |
+          enabled=false
+          if [ -n "$FETCH" ]; then
+            if [ -z "$(printf '%s' "$MANIFEST" | tr -d '[:space:]')" ]; then
+              echo "::error::corpus-sha256 is required when corpus-fetch-command is set"
+              exit 1
+            fi
+            if [ "$LINUX_ONLY" != "true" ] || [ "$RUNNER_OS" = "Linux" ]; then
+              enabled=true
+            fi
+          fi
+          if command -v sha256sum >/dev/null; then sha=(sha256sum); else sha=(shasum -a 256); fi
+          digest="$(printf '%s\n%s' "$EXTRA_KEY" "$MANIFEST" | "${sha[@]}" | cut -c1-16)"
+          echo "enabled=$enabled" >> "$GITHUB_OUTPUT"
+          echo "key=corpus-$RUNNER_OS-$digest" >> "$GITHUB_OUTPUT"
+
+      - name: Restore corpus cache
+        id: cache
+        if: steps.corpus.outputs.enabled == 'true'
+        uses: actions/cache@v6
+        with:
+          path: ${{ inputs.corpus-path }}
+          key: ${{ steps.corpus.outputs.key }}
+
+      - name: Fetch corpus
+        if: steps.corpus.outputs.enabled == 'true' && steps.cache.outputs.cache-hit != 'true'
+        env:
+          FETCH: ${{ inputs.corpus-fetch-command }}
+          CORPUS_PATH: ${{ inputs.corpus-path }}
+        run: |
+          mkdir -p "$CORPUS_PATH"
+          cd "$CORPUS_PATH"
+          bash -euo pipefail -c "$FETCH"
+
+      - name: Verify corpus sha256
+        if: steps.corpus.outputs.enabled == 'true'
+        env:
+          MANIFEST: ${{ inputs.corpus-sha256 }}
+          CORPUS_PATH: ${{ inputs.corpus-path }}
+          CORPUS_ENV_VAR: ${{ inputs.corpus-env-var }}
+        run: |
+          cd "$CORPUS_PATH"
+          if command -v sha256sum >/dev/null; then sha=(sha256sum); else sha=(shasum -a 256); fi
+          printf '%s\n' "$MANIFEST" | sed -e 's/^[[:space:]]*//' -e '/^$/d' | "${sha[@]}" -c -
+          if [ -n "$CORPUS_ENV_VAR" ]; then
+            echo "$CORPUS_ENV_VAR=$CORPUS_DIR" >> "$GITHUB_ENV"
+          fi
+
+      - name: Build abi3 wheel
+        env:
+          MATURIN_VERSION: ${{ inputs.maturin-version }}
+          FEATURES: ${{ inputs.maturin-features }}
+          MANIFEST_PATH: ${{ inputs.manifest-path }}
+          MATURIN_ARGS: ${{ inputs.maturin-args }}
+        run: |
+          python -m pip install "maturin$MATURIN_VERSION"
+          args=(build --release --out dist)
+          if [ -n "$FEATURES" ]; then args+=(--features "$FEATURES"); fi
+          if [ -n "$MANIFEST_PATH" ]; then args+=(--manifest-path "$MANIFEST_PATH"); fi
+          # MATURIN_ARGS is split on whitespace on purpose.
+          # shellcheck disable=SC2086
+          maturin "${args[@]}" $MATURIN_ARGS
+          ls dist
+          for whl in dist/*.whl; do
+            case "$whl" in
+              *-abi3-*) ;;
+              *) echo "::error::$whl is not an abi3 wheel"; exit 1 ;;
+            esac
+          done
+
+      - name: Install wheel
+        env:
+          PYTEST_REQUIREMENTS: ${{ inputs.pytest-requirements }}
+        run: |
+          # shellcheck disable=SC2086
+          python -m pip install dist/*.whl $PYTEST_REQUIREMENTS
+
+      - name: Test environment
+        if: inputs.test-env != ''
+        env:
+          TEST_ENV: ${{ inputs.test-env }}
+        run: |
+          printf '%s\n' "$TEST_ENV" | sed -e 's/^[[:space:]]*//' -e '/^$/d' | while IFS= read -r line; do
+            case "$line" in
+              *=*) ;;
+              *) echo "::error::test-env line is not KEY=VALUE: $line"; exit 1 ;;
+            esac
+            echo "${line//\{corpus\}/"$CORPUS_DIR"}" >> "$GITHUB_ENV"
+          done
+
+      - name: pytest
+        env:
+          PYTEST_ARGS: ${{ inputs.pytest-args }}
+          REQUIRE: ${{ steps.corpus.outputs.enabled }}
+        run: |
+          if [ "$REQUIRE" = "true" ]; then
+            export REQUIRE_CORPUS=1
+          fi
+          # shellcheck disable=SC2086
+          python -m pytest $PYTEST_ARGS
