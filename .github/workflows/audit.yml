@@ -1,0 +1,46 @@
+# Reusable dependency audit: cargo audit against the RustSec Advisory DB.
+#
+# The caller owns the triggers (push/pull_request path filters on
+# Cargo.toml/Cargo.lock plus a weekly schedule). Inputs are documented in
+# this repo's README.md.
+
+name: Audit
+
+on:
+  workflow_call:
+    inputs:
+      ignore:
+        description: >-
+          Advisory IDs to ignore (for example RUSTSEC-2026-0194), separated
+          by whitespace or newlines. Text after # on a line is a comment.
+        type: string
+        default: ""
+      args:
+        description: Extra arguments to `cargo audit`.
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    name: cargo audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: taiki-e/install-action@cargo-audit
+
+      - name: cargo audit
+        env:
+          IGNORE: ${{ inputs.ignore }}
+          AUDIT_ARGS: ${{ inputs.args }}
+        run: |
+          args=()
+          for id in $(printf '%s\n' "$IGNORE" | sed 's/#.*//'); do
+            args+=(--ignore "$id")
+          done
+          # AUDIT_ARGS is split on whitespace on purpose.
+          # shellcheck disable=SC2086
+          cargo audit "${args[@]}" $AUDIT_ARGS

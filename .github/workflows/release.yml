@@ -1,0 +1,403 @@
+# Reusable release workflow for Sigilweaver Rust + PyO3 reader repos.
+# The caller runs it on `push: tags: ["v*"]`.
+#
+# Jobs, in order:
+#   verify          - fails unless the tag is v<version> for the Cargo.toml
+#                     version and CHANGELOG has a non-empty section for it.
+#   ci              - rust-ci.yml at Sigilweaver/.github@main.
+#   build-wheels    - one abi3 wheel per entry in wheel-targets (maturin).
+#   build-sdist     - maturin sdist.
+#   publish-crates  - after ci and both builds succeed, publishes `crates`
+#                     in the given order. A crate version already on
+#                     crates.io is skipped, so a re-run continues where the
+#                     last one stopped. Authenticates with crates.io trusted
+#                     publishing; falls back to the CARGO_REGISTRY_TOKEN
+#                     secret when the trusted-publishing exchange fails and
+#                     the secret is set.
+#
+# Wheels and the sdist are uploaded as artifacts named release-dist-*
+# (the dist-artifact-pattern output). PyPI trusted publishing does not
+# work from inside a reusable workflow (see the pypa/gh-action-pypi-publish
+# README), so the caller uploads them to PyPI from its own top-level job,
+# then calls release-finalize.yml for the GitHub Release and the docs
+# branch. See README.md for the full caller.
+
+name: Release
+
+on:
+  workflow_call:
+    inputs:
+      crates:
+        description: >-
+          Cargo package names to publish to crates.io, in publish order,
+          separated by whitespace or newlines. Empty skips crates.io.
+        type: string
+        default: ""
+      version-package:
+        description: >-
+          Package whose version the tag must match. Empty uses
+          [workspace.package] version, then [package] version, from the
+          root Cargo.toml.
+        type: string
+        default: ""
+      changelog:
+        description: Changelog file that must contain a section for the version.
+        type: string
+        default: CHANGELOG.md
+      crates-io-trusted-publishing:
+        description: >-
+          Try crates.io trusted publishing before CARGO_REGISTRY_TOKEN.
+          false uses only the token.
+        type: boolean
+        default: true
+      crates-io-environment:
+        description: GitHub environment for the crates.io publish job.
+        type: string
+        default: crates-io
+      python:
+        description: Build wheels and an sdist.
+        type: boolean
+        default: true
+      python-manifest-path:
+        description: >-
+          Cargo.toml of the PyO3 crate. Empty uses [tool.maturin]
+          manifest-path from pyproject.toml.
+        type: string
+        default: ""
+      maturin-features:
+        description: Comma-separated Cargo features for the wheel builds.
+        type: string
+        default: pyo3/abi3-py38
+      maturin-args:
+        description: Extra arguments to `maturin build` for the wheels.
+        type: string
+        default: ""
+      wheel-targets:
+        description: >-
+          JSON array of {"os": ..., "target": ...} objects for the wheel
+          matrix. Empty means Linux x86_64 + aarch64, macOS x86_64 +
+          aarch64, Windows x86_64.
+        type: string
+        default: ""
+      ci-os:
+        description: Passed to rust-ci.yml as `os`.
+        type: string
+        default: ""
+      ci-test-args:
+        description: Passed to rust-ci.yml as `test-args`.
+        type: string
+        default: ""
+      ci-clippy-args:
+        description: Passed to rust-ci.yml as `clippy-args`.
+        type: string
+        default: ""
+      ci-msrv:
+        description: Passed to rust-ci.yml as `msrv`.
+        type: boolean
+        default: true
+      ci-msrv-args:
+        description: Passed to rust-ci.yml as `msrv-args`.
+        type: string
+        default: ""
+      ci-doc:
+        description: Passed to rust-ci.yml as `doc`.
+        type: boolean
+        default: true
+      ci-doc-args:
+        description: Passed to rust-ci.yml as `doc-args`.
+        type: string
+        default: ""
+      ci-corpus-fetch-command:
+        description: Passed to rust-ci.yml as `corpus-fetch-command`.
+        type: string
+        default: ""
+      ci-corpus-sha256:
+        description: Passed to rust-ci.yml as `corpus-sha256`.
+        type: string
+        default: ""
+      ci-corpus-path:
+        description: Passed to rust-ci.yml as `corpus-path`.
+        type: string
+        default: corpus
+      ci-corpus-cache-key:
+        description: Passed to rust-ci.yml as `corpus-cache-key`.
+        type: string
+        default: ""
+      ci-corpus-env-var:
+        description: Passed to rust-ci.yml as `corpus-env-var`.
+        type: string
+        default: ""
+      ci-corpus-linux-only:
+        description: Passed to rust-ci.yml as `corpus-linux-only`.
+        type: boolean
+        default: false
+      ci-corpus-test-args:
+        description: Passed to rust-ci.yml as `corpus-test-args`.
+        type: string
+        default: ""
+    secrets:
+      CARGO_REGISTRY_TOKEN:
+        description: crates.io token, used when trusted publishing is off or unavailable.
+        required: false
+    outputs:
+      version:
+        description: The released version (tag without the leading v).
+        value: ${{ jobs.verify.outputs.version }}
+      dist-artifact-pattern:
+        description: download-artifact pattern matching the wheel and sdist artifacts.
+        value: ${{ jobs.verify.outputs.dist-artifact-pattern }}
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  verify:
+    name: Verify tag and changelog
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      dist-artifact-pattern: release-dist-*
+    steps:
+      - name: Require a tag
+        if: github.ref_type != 'tag'
+        run: |
+          echo "::error::release.yml must run on a tag push, got $GITHUB_REF"
+          exit 1
+
+      - uses: actions/checkout@v7
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Check tag against Cargo.toml and changelog
+        id: version
+        shell: python3 {0}
+        env:
+          TAG: ${{ github.ref_name }}
+          VERSION_PACKAGE: ${{ inputs.version-package }}
+          CHANGELOG: ${{ inputs.changelog }}
+        run: |
+          import json
+          import os
+          import re
+          import subprocess
+          import sys
+          import tomllib
+
+          tag = os.environ["TAG"]
+          package = os.environ["VERSION_PACKAGE"]
+          changelog = os.environ["CHANGELOG"]
+
+          if package:
+              metadata = json.loads(subprocess.run(
+                  ["cargo", "metadata", "--no-deps", "--format-version", "1"],
+                  check=True, capture_output=True, text=True,
+              ).stdout)
+              versions = [p["version"] for p in metadata["packages"] if p["name"] == package]
+              if not versions:
+                  print(f"::error::package {package} is not in this workspace")
+                  sys.exit(1)
+              version, source = versions[0], f"package {package}"
+          else:
+              with open("Cargo.toml", "rb") as f:
+                  manifest = tomllib.load(f)
+              version = manifest.get("workspace", {}).get("package", {}).get("version")
+              source = "[workspace.package] version"
+              if not isinstance(version, str):
+                  version = manifest.get("package", {}).get("version")
+                  source = "[package] version"
+              if not isinstance(version, str):
+                  print("::error::no version in [workspace.package] or [package] of Cargo.toml")
+                  sys.exit(1)
+
+          if tag != f"v{version}":
+              print(f"::error::tag {tag} does not match {source} {version} (expected v{version})")
+              sys.exit(1)
+
+          try:
+              with open(changelog, encoding="utf-8") as f:
+                  lines = f.read().splitlines()
+          except FileNotFoundError:
+              print(f"::error::{changelog} not found")
+              sys.exit(1)
+          heading = re.compile(r"^##\s+\[?v?" + re.escape(version) + r"\]?(\s|$)")
+          start = next((i for i, line in enumerate(lines) if heading.match(line)), None)
+          if start is None:
+              print(f"::error::{changelog} has no '## [{version}]' section")
+              sys.exit(1)
+          body = []
+          for line in lines[start + 1:]:
+              if line.startswith("## "):
+                  break
+              body.append(line)
+          if not "\n".join(body).strip():
+              print(f"::error::the {version} section of {changelog} is empty")
+              sys.exit(1)
+
+          print(f"Releasing {version} ({source}) from tag {tag}")
+          with open(os.environ["GITHUB_OUTPUT"], "a") as out:
+              out.write(f"version={version}\n")
+
+  ci:
+    name: CI
+    needs: verify
+    # Full path rather than ./ so the reference does not depend on how a
+    # local path resolves when this file is called from another repo.
+    uses: Sigilweaver/.github/.github/workflows/rust-ci.yml@main
+    with:
+      os: ${{ inputs.ci-os }}
+      test-args: ${{ inputs.ci-test-args }}
+      clippy-args: ${{ inputs.ci-clippy-args }}
+      msrv: ${{ inputs.ci-msrv }}
+      msrv-args: ${{ inputs.ci-msrv-args }}
+      doc: ${{ inputs.ci-doc }}
+      doc-args: ${{ inputs.ci-doc-args }}
+      corpus-fetch-command: ${{ inputs.ci-corpus-fetch-command }}
+      corpus-sha256: ${{ inputs.ci-corpus-sha256 }}
+      corpus-path: ${{ inputs.ci-corpus-path }}
+      corpus-cache-key: ${{ inputs.ci-corpus-cache-key }}
+      corpus-env-var: ${{ inputs.ci-corpus-env-var }}
+      corpus-linux-only: ${{ inputs.ci-corpus-linux-only }}
+      corpus-test-args: ${{ inputs.ci-corpus-test-args }}
+
+  build-wheels:
+    name: wheel (${{ matrix.os }} / ${{ matrix.target }})
+    needs: verify
+    if: inputs.python
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(inputs.wheel-targets || '[{"os":"ubuntu-latest","target":"x86_64"},{"os":"ubuntu-latest","target":"aarch64"},{"os":"macos-latest","target":"x86_64"},{"os":"macos-latest","target":"aarch64"},{"os":"windows-latest","target":"x86_64"}]') }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - uses: PyO3/maturin-action@v1
+        with:
+          target: ${{ matrix.target }}
+          manylinux: auto
+          args: >-
+            --release --out dist
+            ${{ inputs.maturin-features != '' && format('--features {0}', inputs.maturin-features) || '' }}
+            ${{ inputs.python-manifest-path != '' && format('--manifest-path {0}', inputs.python-manifest-path) || '' }}
+            ${{ inputs.maturin-args }}
+
+      - name: Require abi3 wheels
+        shell: bash
+        run: |
+          ls dist
+          for whl in dist/*.whl; do
+            case "$whl" in
+              *-abi3-*) ;;
+              *) echo "::error::$whl is not an abi3 wheel"; exit 1 ;;
+            esac
+          done
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: release-dist-wheel-${{ matrix.os }}-${{ matrix.target }}
+          path: dist/*.whl
+          if-no-files-found: error
+
+  build-sdist:
+    name: sdist
+    needs: verify
+    if: inputs.python
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: PyO3/maturin-action@v1
+        with:
+          command: sdist
+          args: >-
+            --out dist
+            ${{ inputs.python-manifest-path != '' && format('--manifest-path {0}', inputs.python-manifest-path) || '' }}
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: release-dist-sdist
+          path: dist/*.tar.gz
+          if-no-files-found: error
+
+  publish-crates:
+    name: Publish to crates.io
+    needs: [verify, ci, build-wheels, build-sdist]
+    # Runs when every needed job succeeded or was skipped (python: false).
+    if: ${{ !cancelled() && !failure() && inputs.crates != '' }}
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.crates-io-environment }}
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Check for a CARGO_REGISTRY_TOKEN fallback
+        id: fallback
+        env:
+          FALLBACK_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+        run: |
+          if [ -n "$FALLBACK_TOKEN" ]; then
+            echo "available=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "available=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      # Token exchange only, nothing is published here. It may fail only
+      # when a CARGO_REGISTRY_TOKEN fallback exists.
+      - name: crates.io trusted publishing token
+        id: auth
+        if: inputs.crates-io-trusted-publishing
+        continue-on-error: ${{ steps.fallback.outputs.available == 'true' }}
+        uses: rust-lang/crates-io-auth-action@v1
+
+      - name: cargo publish
+        env:
+          CRATES: ${{ inputs.crates }}
+          TRUSTED_TOKEN: ${{ steps.auth.outputs.token }}
+          FALLBACK_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+        run: |
+          if [ -n "$TRUSTED_TOKEN" ]; then
+            echo "Authenticating with crates.io trusted publishing"
+            export CARGO_REGISTRY_TOKEN="$TRUSTED_TOKEN"
+          elif [ -n "$FALLBACK_TOKEN" ]; then
+            echo "::warning::crates.io trusted publishing unavailable or disabled; using CARGO_REGISTRY_TOKEN"
+            export CARGO_REGISTRY_TOKEN="$FALLBACK_TOKEN"
+          else
+            echo "::error::no crates.io credentials: trusted publishing failed or is disabled, and CARGO_REGISTRY_TOKEN is not set"
+            exit 1
+          fi
+
+          metadata="$(cargo metadata --no-deps --format-version 1)"
+          for name in $CRATES; do
+            version="$(jq -r --arg n "$name" '.packages[] | select(.name == $n) | .version' <<<"$metadata")"
+            if [ -z "$version" ]; then
+              echo "::error::package $name is not in this workspace"
+              exit 1
+            fi
+            status="$(curl -sS -o /dev/null -w '%{http_code}' \
+              --user-agent "Sigilweaver release workflow (https://github.com/$GITHUB_REPOSITORY)" \
+              "https://crates.io/api/v1/crates/$name/$version")"
+            case "$status" in
+              200)
+                echo "::notice::$name $version is already on crates.io; skipping"
+                continue
+                ;;
+              404) ;;
+              *)
+                echo "::error::crates.io lookup for $name $version returned HTTP $status"
+                exit 1
+                ;;
+            esac
+            echo "Publishing $name $version"
+            cargo publish -p "$name"
+          done

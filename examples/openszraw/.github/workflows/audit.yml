@@ -1,0 +1,34 @@
+# Dependency vulnerability audit for OpenSZRaw.
+#
+# cargo audit against the RustSec Advisory DB on every push/PR that touches
+# the lockfile or manifests, plus a weekly schedule so advisories published
+# after the last dependency change are still caught.
+
+name: Audit
+
+on:
+  push:
+    branches: ["main"]
+    paths:
+      - "**/Cargo.toml"
+      - "Cargo.lock"
+      - ".github/workflows/audit.yml"
+  pull_request:
+    branches: ["main"]
+    paths:
+      - "**/Cargo.toml"
+      - "Cargo.lock"
+      - ".github/workflows/audit.yml"
+  schedule:
+    - cron: "0 6 * * 1"
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    name: Audit
+    uses: Sigilweaver/.github/.github/workflows/audit.yml@main
+    with:
+      # One advisory ID per line, with the reason after #. None today.
+      ignore: ""

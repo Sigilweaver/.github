@@ -1,0 +1,282 @@
+# Reusable Rust CI for Sigilweaver Rust + PyO3 reader repos.
+#
+# Jobs:
+#   lint  - cargo fmt --check and cargo clippy -D warnings, once, on
+#           ubuntu-latest (OS-independent, see ops/CI_STANDARDS.md).
+#   test  - cargo test on every OS in `os`. When `corpus-fetch-command`
+#           is set, fetches the corpus into `corpus-path` (cached with
+#           actions/cache, sha256-verified on every run, cache hit or not)
+#           and runs the tests with REQUIRE_CORPUS=1.
+#   msrv  - cargo check on the toolchain named by `rust-version` in the
+#           root Cargo.toml ([workspace.package] first, then [package]).
+#   doc   - cargo doc with RUSTDOCFLAGS=-D warnings.
+#
+# Inputs and an example caller are documented in this repo's README.md.
+
+name: Rust CI
+
+on:
+  workflow_call:
+    inputs:
+      os:
+        description: >-
+          JSON array of runner labels for the test job. Empty means
+          ["ubuntu-latest", "macos-latest", "windows-latest"].
+        type: string
+        default: ""
+      test-args:
+        description: Arguments to `cargo test`. Empty means "--workspace --all-targets".
+        type: string
+        default: ""
+      clippy-args:
+        description: >-
+          Arguments to `cargo clippy` (before `--`). Empty means
+          "--workspace --all-targets".
+        type: string
+        default: ""
+      msrv:
+        description: Run the MSRV job.
+        type: boolean
+        default: true
+      msrv-args:
+        description: Arguments to `cargo check` on the MSRV toolchain. Empty means "--workspace".
+        type: string
+        default: ""
+      doc:
+        description: Run the cargo doc job.
+        type: boolean
+        default: true
+      doc-args:
+        description: Arguments to `cargo doc`. Empty means "--workspace --no-deps".
+        type: string
+        default: ""
+      corpus-fetch-command:
+        description: >-
+          Bash script that downloads the test corpus. Runs with the corpus
+          directory as its working directory, and only on a cache miss.
+          Empty disables corpus handling.
+        type: string
+        default: ""
+      corpus-sha256:
+        description: >-
+          sha256sum-format manifest ("<sha256>  <file>" per line, paths
+          relative to the corpus directory). Required when
+          corpus-fetch-command is set.
+        type: string
+        default: ""
+      corpus-path:
+        description: Corpus directory, relative to the repository root.
+        type: string
+        default: corpus
+      corpus-cache-key:
+        description: >-
+          Extra string mixed into the corpus cache key. The key already
+          includes the runner OS and a hash of corpus-sha256.
+        type: string
+        default: ""
+      corpus-env-var:
+        description: >-
+          Name of an environment variable to set to the absolute corpus
+          directory for the test steps (for example OPENSZRAW_CORPUS).
+        type: string
+        default: ""
+      corpus-linux-only:
+        description: Fetch the corpus only on Linux runners; other OSes test without it.
+        type: boolean
+        default: false
+      corpus-test-args:
+        description: >-
+          When set, the main `cargo test` runs without REQUIRE_CORPUS and a
+          second `cargo test` with these arguments runs with
+          REQUIRE_CORPUS=1. When empty, the main `cargo test` itself runs
+          with REQUIRE_CORPUS=1.
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  lint:
+    name: fmt + clippy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: cargo fmt
+        run: cargo fmt --all -- --check
+
+      - name: cargo clippy
+        env:
+          CLIPPY_ARGS: ${{ inputs.clippy-args || '--workspace --all-targets' }}
+        run: |
+          # CLIPPY_ARGS is split on whitespace on purpose.
+          # shellcheck disable=SC2086
+          cargo clippy $CLIPPY_ARGS -- -D warnings
+
+  test:
+    name: test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: ${{ fromJSON(inputs.os || '["ubuntu-latest", "macos-latest", "windows-latest"]') }}
+    defaults:
+      run:
+        # windows-latest defaults to pwsh; every step here is bash.
+        shell: bash
+    env:
+      RUSTFLAGS: -D warnings
+      # Native absolute path, so test binaries (which run with the crate
+      # directory as cwd) can use it on every OS.
+      CORPUS_DIR: ${{ github.workspace }}/${{ inputs.corpus-path }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Corpus settings
+        id: corpus
+        env:
+          FETCH: ${{ inputs.corpus-fetch-command }}
+          MANIFEST: ${{ inputs.corpus-sha256 }}
+          LINUX_ONLY: ${{ inputs.corpus-linux-only }}
+          EXTRA_KEY: ${{ inputs.corpus-cache-key }}
+        run: |
+          enabled=false
+          if [ -n "$FETCH" ]; then
+            if [ -z "$(printf '%s' "$MANIFEST" | tr -d '[:space:]')" ]; then
+              echo "::error::corpus-sha256 is required when corpus-fetch-command is set"
+              exit 1
+            fi
+            if [ "$LINUX_ONLY" != "true" ] || [ "$RUNNER_OS" = "Linux" ]; then
+              enabled=true
+            fi
+          fi
+          if command -v sha256sum >/dev/null; then sha=(sha256sum); else sha=(shasum -a 256); fi
+          digest="$(printf '%s\n%s' "$EXTRA_KEY" "$MANIFEST" | "${sha[@]}" | cut -c1-16)"
+          echo "enabled=$enabled" >> "$GITHUB_OUTPUT"
+          echo "key=corpus-$RUNNER_OS-$digest" >> "$GITHUB_OUTPUT"
+
+      - name: Restore corpus cache
+        id: cache
+        if: steps.corpus.outputs.enabled == 'true'
+        uses: actions/cache@v6
+        with:
+          path: ${{ inputs.corpus-path }}
+          key: ${{ steps.corpus.outputs.key }}
+
+      - name: Fetch corpus
+        if: steps.corpus.outputs.enabled == 'true' && steps.cache.outputs.cache-hit != 'true'
+        env:
+          FETCH: ${{ inputs.corpus-fetch-command }}
+          CORPUS_PATH: ${{ inputs.corpus-path }}
+        run: |
+          mkdir -p "$CORPUS_PATH"
+          cd "$CORPUS_PATH"
+          bash -euo pipefail -c "$FETCH"
+
+      - name: Verify corpus sha256
+        if: steps.corpus.outputs.enabled == 'true'
+        env:
+          MANIFEST: ${{ inputs.corpus-sha256 }}
+          CORPUS_PATH: ${{ inputs.corpus-path }}
+          CORPUS_ENV_VAR: ${{ inputs.corpus-env-var }}
+        run: |
+          cd "$CORPUS_PATH"
+          if command -v sha256sum >/dev/null; then sha=(sha256sum); else sha=(shasum -a 256); fi
+          printf '%s\n' "$MANIFEST" | sed -e 's/^[[:space:]]*//' -e '/^$/d' | "${sha[@]}" -c -
+          if [ -n "$CORPUS_ENV_VAR" ]; then
+            echo "$CORPUS_ENV_VAR=$CORPUS_DIR" >> "$GITHUB_ENV"
+          fi
+
+      - name: cargo test
+        env:
+          TEST_ARGS: ${{ inputs.test-args || '--workspace --all-targets' }}
+          REQUIRE: ${{ steps.corpus.outputs.enabled == 'true' && inputs.corpus-test-args == '' }}
+        run: |
+          if [ "$REQUIRE" = "true" ]; then
+            export REQUIRE_CORPUS=1
+          fi
+          # TEST_ARGS is split on whitespace on purpose.
+          # shellcheck disable=SC2086
+          cargo test $TEST_ARGS
+
+      - name: cargo test (corpus required)
+        if: steps.corpus.outputs.enabled == 'true' && inputs.corpus-test-args != ''
+        env:
+          REQUIRE_CORPUS: "1"
+          CORPUS_TEST_ARGS: ${{ inputs.corpus-test-args }}
+        run: |
+          # shellcheck disable=SC2086
+          cargo test $CORPUS_TEST_ARGS
+
+  msrv:
+    name: MSRV
+    if: inputs.msrv
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Read rust-version from Cargo.toml
+        id: msrv
+        shell: python3 {0}
+        run: |
+          import os
+          import sys
+          import tomllib
+
+          with open("Cargo.toml", "rb") as f:
+              manifest = tomllib.load(f)
+          version = manifest.get("workspace", {}).get("package", {}).get("rust-version")
+          if not isinstance(version, str):
+              version = manifest.get("package", {}).get("rust-version")
+          if not isinstance(version, str):
+              print("::error::no rust-version in [workspace.package] or [package] of Cargo.toml")
+              sys.exit(1)
+          print(f"MSRV {version}")
+          with open(os.environ["GITHUB_OUTPUT"], "a") as out:
+              out.write(f"version={version}\n")
+
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ steps.msrv.outputs.version }}
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: cargo check (MSRV ${{ steps.msrv.outputs.version }})
+        env:
+          MSRV_ARGS: ${{ inputs.msrv-args || '--workspace' }}
+        run: |
+          # shellcheck disable=SC2086
+          cargo check $MSRV_ARGS
+
+  doc:
+    name: cargo doc
+    if: inputs.doc
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: cargo doc
+        env:
+          RUSTDOCFLAGS: -D warnings
+          DOC_ARGS: ${{ inputs.doc-args || '--workspace --no-deps' }}
+        run: |
+          # shellcheck disable=SC2086
+          cargo doc $DOC_ARGS
