@@ -75,7 +75,7 @@ jobs:
 
 
           def field(name):
-              m = re.search(rf'^{name}:\s*["\']?([^"\'\s#]+)', text, re.M)
+              m = re.search(rf'^{name}:[ \t]*["\']?([^"\'\s#]+)', text, re.M)
               return m.group(1) if m else None
 
 
@@ -83,9 +83,10 @@ jobs:
           cff_date = field("date-released")
 
           if cff_version != version:
-              fail(cff, "version", f"{cff}: `version` is {cff_version!r} but {manifest} is {version!r}. Set `version: \"{version}\"`.")
+              fail(cff, "version", f"{cff}: `version` is {cff_version or 'missing'} but {manifest} is {version}. Set `version: \"{version}\"`.")
 
           published = None  # {version: UTC date string}
+          last_error = None
           for attempt in range(3):
               try:
                   req = urllib.request.Request(
@@ -98,14 +99,16 @@ jobs:
                   break
               except urllib.error.HTTPError as e:
                   if e.code == 404:
-                      sys.exit(f"::error::crate {crate!r} not found on crates.io; fix the `crate` input of the workflow call")
-                  time.sleep(5 * (attempt + 1))
-              except (urllib.error.URLError, TimeoutError, ValueError, KeyError):
+                      sys.exit(f"::error::crate {crate!r} not found on crates.io; fix the `crate` input of the workflow call (a crate's first release has no crates.io entry yet and needs the check added after it is published)")
+                  last_error = f"HTTP {e.code}"
+              except (urllib.error.URLError, TimeoutError, ValueError, KeyError) as e:
+                  last_error = repr(e)
+              if attempt < 2:
                   time.sleep(5 * (attempt + 1))
 
           today = datetime.datetime.now(datetime.timezone.utc).date().isoformat()
           if published is None:
-              print(f"::warning::crates.io unreachable; date-released not checked for {crate} {version}")
+              print(f"::warning::crates.io unreachable ({last_error}); date-released not checked for {crate} {version}")
           elif cff_date is None or not re.fullmatch(r"\d{4}-\d{2}-\d{2}", cff_date):
               want = published.get(version, today)
               fail(cff, "date-released", f"{cff}: `date-released` is missing or not YYYY-MM-DD. Set `date-released: \"{want}\"`.")
