@@ -48,7 +48,7 @@ jobs:
           CFF: ${{ inputs.cff }}
         run: |
           python3 - <<'PY'
-          import datetime, json, os, re, sys, time, tomllib, urllib.error, urllib.request
+          import datetime, http.client, json, os, re, sys, time, tomllib, urllib.error, urllib.request
 
           crate = os.environ["CRATE"]
           manifest = os.environ["MANIFEST"]
@@ -101,7 +101,7 @@ jobs:
                   if e.code == 404:
                       sys.exit(f"::error::crate {crate!r} not found on crates.io; fix the `crate` input of the workflow call (a crate's first release has no crates.io entry yet and needs the check added after it is published)")
                   last_error = f"HTTP {e.code}"
-              except (urllib.error.URLError, TimeoutError, ValueError, KeyError) as e:
+              except (urllib.error.URLError, OSError, http.client.HTTPException, ValueError, KeyError, TypeError) as e:
                   last_error = repr(e)
               if attempt < 2:
                   time.sleep(5 * (attempt + 1))
@@ -129,6 +129,11 @@ jobs:
 
           if failures:
               sys.exit(1)
-          status = "published " + published[version] if published and version in published else "unpublished"
+          if published is None:
+              status = "date not checked"
+          elif version in published:
+              status = "published " + published[version]
+          else:
+              status = "unpublished"
           print(f"ok: {cff} version {version}, date-released {cff_date} ({status})")
           PY
