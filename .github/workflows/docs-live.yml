@@ -1,0 +1,51 @@
+name: Docs live
+
+# Reusable workflow. Moves a branch to the commit of the release tag that
+# triggered the caller, so a docs site deployed from that branch describes the
+# last release instead of main. Runs only on a tag ref. The push is forced: the
+# branch tracks releases and is never edited by hand.
+#
+# The caller job must grant `contents: write` and should run after the publish
+# jobs (`needs:`), so a failed release does not move the docs.
+#
+# Caller (in a workflow triggered by a tag push):
+#   jobs:
+#     docs-live:
+#       needs: [cargo-publish, pypi-publish]
+#       permissions:
+#         contents: write
+#       uses: Sigilweaver/.github/.github/workflows/docs-live.yml@main
+#
+# To use another branch:
+#   with:
+#     branch: my-docs-branch
+
+on:
+  workflow_call:
+    inputs:
+      branch:
+        description: "Branch moved to the release tag commit"
+        required: false
+        type: string
+        default: docs-live
+
+permissions:
+  contents: read
+
+jobs:
+  docs-live:
+    name: Move ${{ inputs.branch }} to the release tag
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+      - name: Push the tag commit to the branch
+        env:
+          BRANCH: ${{ inputs.branch }}
+        run: |
+          if [ "${GITHUB_REF_TYPE}" != "tag" ]; then
+            echo "::error::docs-live runs on a tag ref only; got ${GITHUB_REF}"
+            exit 1
+          fi
+          git push --force origin "${GITHUB_SHA}:refs/heads/${BRANCH}"
