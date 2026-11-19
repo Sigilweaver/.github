@@ -1,0 +1,139 @@
+name: Citation check
+
+# Reusable workflow. Fails when CITATION.cff disagrees with the crate release:
+#   - `version` must equal the version in the manifest.
+#   - `date-released` must equal the UTC date crates.io published that version.
+#     While the version is not yet published (a release PR or branch), it must
+#     be a valid date, not in the future, and not before the newest published
+#     version.
+#
+# Caller:
+#   jobs:
+#     citation:
+#       uses: Sigilweaver/.github/.github/workflows/citation-check.yml@main
+#       with:
+#         crate: opentfraw
+
+on:
+  workflow_call:
+    inputs:
+      crate:
+        description: "crates.io crate name whose release date is checked"
+        required: true
+        type: string
+      manifest:
+        description: "Manifest holding the version (Cargo.toml workspace.package or package, or pyproject.toml project)"
+        required: false
+        type: string
+        default: Cargo.toml
+      cff:
+        description: "Path to the citation file"
+        required: false
+        type: string
+        default: CITATION.cff
+
+permissions:
+  contents: read
+
+jobs:
+  citation:
+    name: CITATION.cff matches release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Check CITATION.cff
+        env:
+          CRATE: ${{ inputs.crate }}
+          MANIFEST: ${{ inputs.manifest }}
+          CFF: ${{ inputs.cff }}
+        run: |
+          python3 - <<'PY'
+          import datetime, http.client, json, os, re, sys, time, tomllib, urllib.error, urllib.request
+
+          crate = os.environ["CRATE"]
+          manifest = os.environ["MANIFEST"]
+          cff = os.environ["CFF"]
+          failures = []
+
+
+          def fail(path, field, msg):
+              print(f"::error file={path},title={field}::{msg}")
+              failures.append(msg)
+
+
+          with open(manifest, "rb") as f:
+              data = tomllib.load(f)
+          version = (
+              data.get("workspace", {}).get("package", {}).get("version")
+              or data.get("package", {}).get("version")
+              or data.get("project", {}).get("version")
+          )
+          if not isinstance(version, str):
+              sys.exit(f"::error file={manifest}::no literal version found in {manifest}")
+
+          text = open(cff, encoding="utf-8").read()
+
+
+          def field(name):
+              m = re.search(rf'^{name}:[ \t]*["\']?([^"\'\s#]+)', text, re.M)
+              return m.group(1) if m else None
+
+
+          cff_version = field("version")
+          cff_date = field("date-released")
+
+          if cff_version != version:
+              fail(cff, "version", f"{cff}: `version` is {cff_version or 'missing'} but {manifest} is {version}. Set `version: \"{version}\"`.")
+
+          published = None  # {version: UTC date string}
+          last_error = None
+          for attempt in range(3):
+              try:
+                  req = urllib.request.Request(
+                      f"https://crates.io/api/v1/crates/{crate}",
+                      headers={"User-Agent": "sigilweaver-citation-check"},
+                  )
+                  with urllib.request.urlopen(req, timeout=30) as r:
+                      body = json.load(r)
+                  published = {v["num"]: v["created_at"][:10] for v in body["versions"]}
+                  break
+              except urllib.error.HTTPError as e:
+                  if e.code == 404:
+                      sys.exit(f"::error::crate {crate!r} not found on crates.io; fix the `crate` input of the workflow call (a crate's first release has no crates.io entry yet and needs the check added after it is published)")
+                  last_error = f"HTTP {e.code}"
+              except (urllib.error.URLError, OSError, http.client.HTTPException, ValueError, KeyError, TypeError) as e:
+                  last_error = repr(e)
+              if attempt < 2:
+                  time.sleep(5 * (attempt + 1))
+
+          today = datetime.datetime.now(datetime.timezone.utc).date().isoformat()
+          if published is None:
+              print(f"::warning::crates.io unreachable ({last_error}); date-released not checked for {crate} {version}")
+          elif cff_date is None or not re.fullmatch(r"\d{4}-\d{2}-\d{2}", cff_date):
+              want = published.get(version, today)
+              fail(cff, "date-released", f"{cff}: `date-released` is missing or not YYYY-MM-DD. Set `date-released: \"{want}\"`.")
+          elif version in published:
+              if cff_date != published[version]:
+                  fail(cff, "date-released", f"{cff}: `date-released` is {cff_date} but {crate} {version} was published on crates.io on {published[version]} (UTC). Set `date-released: \"{published[version]}\"`.")
+          else:
+              newest = max(published.values(), default=None)
+              try:
+                  datetime.date.fromisoformat(cff_date)
+              except ValueError:
+                  fail(cff, "date-released", f"{cff}: `date-released` {cff_date} is not a real date.")
+              else:
+                  if cff_date > today:
+                      fail(cff, "date-released", f"{cff}: `date-released` {cff_date} is in the future (UTC today is {today}). {version} is not published yet; use the release date.")
+                  elif newest and cff_date < newest:
+                      fail(cff, "date-released", f"{cff}: `date-released` {cff_date} is before the newest published {crate} release ({newest}). {version} is not published yet; use the release date.")
+
+          if failures:
+              sys.exit(1)
+          if published is None:
+              status = "date not checked"
+          elif version in published:
+              status = "published " + published[version]
+          else:
+              status = "unpublished"
+          print(f"ok: {cff} version {version}, date-released {cff_date} ({status})")
+          PY
