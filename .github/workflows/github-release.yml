@@ -1,0 +1,167 @@
+name: GitHub Release
+
+# Reusable workflow. Creates the GitHub Release for the tag that triggered the
+# caller, with that version's CHANGELOG section as the notes. Zenodo archives a
+# version when its GitHub Release is published, so every tagged release needs
+# one. If a Release for the tag already exists the workflow reports it and
+# succeeds without touching it. Versions with a "-" (1.0.0-rc.1) are marked
+# pre-release.
+#
+# The caller job must grant `contents: write` and should run after the publish
+# jobs (`needs:`), so a failed publish does not leave a Release behind.
+#
+# Caller (in a workflow triggered by a tag push):
+#   jobs:
+#     github-release:
+#       needs: [cargo-publish, pypi-publish]
+#       permissions:
+#         contents: write
+#       uses: Sigilweaver/.github/.github/workflows/github-release.yml@main
+#
+# Dry run (nothing is created): start this workflow from the Actions tab of
+# Sigilweaver/.github with a public repository and a tag. It checks out the tag,
+# reads the CHANGELOG section and reports whether a Release already exists. A
+# draft Release is not a published one, so it does not count as existing.
+
+on:
+  workflow_call:
+    inputs:
+      changelog:
+        description: "Changelog file holding a '## [<version>]' section"
+        required: false
+        type: string
+        default: CHANGELOG.md
+      dry-run:
+        description: "Report what would happen and create nothing"
+        required: false
+        type: boolean
+        default: false
+      repository:
+        description: "Repository as owner/name; empty means the calling repository"
+        required: false
+        type: string
+        default: ""
+      tag:
+        description: "Existing tag; empty means the tag that triggered the caller"
+        required: false
+        type: string
+        default: ""
+  workflow_dispatch:
+    inputs:
+      repository:
+        description: "Public repository to check, as owner/name"
+        required: true
+        type: string
+      tag:
+        description: "Existing tag, for example v1.2.3"
+        required: true
+        type: string
+      changelog:
+        description: "Changelog file holding a '## [<version>]' section"
+        required: false
+        type: string
+        default: CHANGELOG.md
+      dry-run:
+        description: "Report what would happen and create nothing"
+        required: false
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+jobs:
+  github-release:
+    name: Create the GitHub Release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      REPO: ${{ inputs.repository || github.repository }}
+      TAG: ${{ inputs.tag || github.ref_name }}
+      CHANGELOG: ${{ inputs.changelog }}
+      DRY_RUN: ${{ inputs.dry-run }}
+    steps:
+      - name: Require a tag
+        if: inputs.tag == '' && github.ref_type != 'tag'
+        run: |
+          echo "::error::github-release runs on a tag ref only; got ${GITHUB_REF}"
+          exit 1
+
+      - name: Look for an existing Release
+        id: existing
+        run: |
+          if out=$(gh api "repos/${REPO}/releases/tags/${TAG}" --jq .html_url 2>&1); then
+            echo "A Release for ${TAG} already exists: ${out}. Nothing to do."
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          elif printf '%s' "$out" | grep -q 'HTTP 404'; then
+            echo "No Release for ${TAG} yet."
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "::error::could not look up the Release for ${TAG}: ${out}"
+            exit 1
+          fi
+
+      - uses: actions/checkout@v7
+        if: steps.existing.outputs.exists == 'false'
+        with:
+          repository: ${{ env.REPO }}
+          ref: refs/tags/${{ env.TAG }}
+          persist-credentials: false
+
+      - name: Extract the release notes
+        if: steps.existing.outputs.exists == 'false'
+        shell: python3 {0}
+        run: |
+          import os
+          import re
+          import sys
+
+          version = os.environ["TAG"].removeprefix("v")
+          changelog = os.environ["CHANGELOG"]
+          with open(changelog, encoding="utf-8") as f:
+              lines = f.read().splitlines()
+          heading = re.compile(r"^##\s+\[?v?" + re.escape(version) + r"\]?(\s|$)")
+          start = next((i for i, line in enumerate(lines) if heading.match(line)), None)
+          if start is None:
+              print(f"::error::{changelog} has no section for version {version}")
+              sys.exit(1)
+          body = []
+          for line in lines[start + 1:]:
+              if line.startswith("## "):
+                  break
+              body.append(line)
+          # Drop trailing link definitions such as "[1.0.0]: https://...".
+          while body and (not body[-1].strip() or re.match(r"^\[[^\]]+\]:\s*\S+", body[-1])):
+              body.pop()
+          notes = "\n".join(body).strip()
+          if not notes:
+              print(f"::error::the {version} section of {changelog} is empty")
+              sys.exit(1)
+          with open(os.path.join(os.environ["RUNNER_TEMP"], "release-notes.md"), "w", encoding="utf-8") as f:
+              f.write(notes + "\n")
+          print(notes)
+
+      - name: Create the Release
+        if: steps.existing.outputs.exists == 'false'
+        run: |
+          flags=()
+          case "${TAG#v}" in
+            *-*) flags+=(--prerelease) ;;
+          esac
+          if [ "${DRY_RUN}" = "true" ]; then
+            echo "Dry run: would create the Release ${TAG} in ${REPO} (${flags[*]:-stable}) with the notes above."
+            exit 0
+          fi
+          if gh release create "${TAG}" --repo "${REPO}" --verify-tag --title "${TAG}" \
+              --notes-file "${RUNNER_TEMP}/release-notes.md" "${flags[@]}"; then
+            exit 0
+          fi
+          # A concurrent run or a hand-made Release can win the race.
+          if gh api "repos/${REPO}/releases/tags/${TAG}" >/dev/null 2>&1; then
+            echo "A Release for ${TAG} appeared while this job ran. Nothing to do."
+            exit 0
+          fi
+          echo "::error::creating the Release for ${TAG} failed"
+          exit 1
