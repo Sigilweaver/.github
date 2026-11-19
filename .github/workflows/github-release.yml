@@ -19,8 +19,9 @@ name: GitHub Release
 #       uses: Sigilweaver/.github/.github/workflows/github-release.yml@main
 #
 # Dry run (nothing is created): start this workflow from the Actions tab of
-# Sigilweaver/.github with a repository and a tag. It checks out the tag, reads
-# the CHANGELOG section and reports whether a Release already exists.
+# Sigilweaver/.github with a public repository and a tag. It checks out the tag,
+# reads the CHANGELOG section and reports whether a Release already exists. A
+# draft Release is not a published one, so it does not count as existing.
 
 on:
   workflow_call:
@@ -35,10 +36,20 @@ on:
         required: false
         type: boolean
         default: false
+      repository:
+        description: "Repository as owner/name; empty means the calling repository"
+        required: false
+        type: string
+        default: ""
+      tag:
+        description: "Existing tag; empty means the tag that triggered the caller"
+        required: false
+        type: string
+        default: ""
   workflow_dispatch:
     inputs:
       repository:
-        description: "Repository to check, as owner/name"
+        description: "Public repository to check, as owner/name"
         required: true
         type: string
       tag:
@@ -50,6 +61,11 @@ on:
         required: false
         type: string
         default: CHANGELOG.md
+      dry-run:
+        description: "Report what would happen and create nothing"
+        required: false
+        type: boolean
+        default: true
 
 permissions:
   contents: read
@@ -65,11 +81,10 @@ jobs:
       REPO: ${{ inputs.repository || github.repository }}
       TAG: ${{ inputs.tag || github.ref_name }}
       CHANGELOG: ${{ inputs.changelog }}
-      # A manual start never creates anything.
-      DRY_RUN: ${{ github.event_name == 'workflow_dispatch' || inputs.dry-run }}
+      DRY_RUN: ${{ inputs.dry-run }}
     steps:
       - name: Require a tag
-        if: github.event_name != 'workflow_dispatch' && github.ref_type != 'tag'
+        if: inputs.tag == '' && github.ref_type != 'tag'
         run: |
           echo "::error::github-release runs on a tag ref only; got ${GITHUB_REF}"
           exit 1
